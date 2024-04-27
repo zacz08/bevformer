@@ -119,7 +119,11 @@ class PerceptionTransformer(BaseModule):
         bev_queries = bev_queries.unsqueeze(1).repeat(1, bs, 1)
         bev_pos = bev_pos.flatten(2).permute(2, 0, 1)
 
-        # obtain rotation angle and shift with ego motion
+
+        """
+        Obtain rotation angle and shift with ego motion
+        Used can_bus(array len()=18) from img_metas
+        """
         delta_x = np.array([each['can_bus'][0]
                            for each in kwargs['img_metas']])
         delta_y = np.array([each['can_bus'][1]
@@ -130,6 +134,7 @@ class PerceptionTransformer(BaseModule):
         grid_length_x = grid_length[1]
         translation_length = np.sqrt(delta_x ** 2 + delta_y ** 2)
         translation_angle = np.arctan2(delta_y, delta_x) / np.pi * 180
+        # bev_angle: vehicle angle change in BEV coord
         bev_angle = ego_angle - translation_angle
         shift_y = translation_length * \
             np.cos(bev_angle / 180 * np.pi) / grid_length_y / bev_h
@@ -183,6 +188,7 @@ class PerceptionTransformer(BaseModule):
         feat_flatten = feat_flatten.permute(
             0, 2, 1, 3)  # (num_cam, H*W, bs, embed_dims)
 
+        # defined in 'projects/mmdet3d_plugin/bevformer/modules/decoder.py'
         bev_embed = self.encoder(
             bev_queries,
             feat_flatten,

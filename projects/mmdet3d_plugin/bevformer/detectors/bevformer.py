@@ -65,7 +65,12 @@ class BEVFormer(MVXTwoStageDetector):
 
 
     def extract_img_feat(self, img, img_metas, len_queue=None):
-        """Extract features of images."""
+        """
+        Extract features of images.
+        Mainly include img_backbone() (Resnet) and img_neck() (FPN)
+        The output (img_feats) of BEVFormer_base has 4 different scales feature layers
+        The output (img_feats) of BEVFormer_small and tiny has 1 scale feature layer
+        """
         B = img.size(0)
         if img is not None:
             
@@ -260,6 +265,7 @@ class BEVFormer(MVXTwoStageDetector):
             img_metas[0][0]['can_bus'][-1] = 0
             img_metas[0][0]['can_bus'][:3] = 0
 
+        # forward process
         new_prev_bev, bbox_results = self.simple_test(
             img_metas[0], img[0], prev_bev=self.prev_frame_info['prev_bev'], **kwargs)
         # During inference, we save the BEV features and ego motion of each timestamp.
@@ -269,11 +275,19 @@ class BEVFormer(MVXTwoStageDetector):
         return bbox_results
 
     def simple_test_pts(self, x, img_metas, prev_bev=None, rescale=False):
-        """Test function"""
+        """
+        Test function
+        function pts_bbox_head() is defined in 'projects/mmdet3d_plugin/bevformer/dense_heads/bevformer_head.py'
+        """
+        ## encode and decode img_feats use BEVFormerHead
+        # input x is a 5D-tensor with shape [bs, num_cams, embed_dims, h, w].
         outs = self.pts_bbox_head(x, img_metas, prev_bev=prev_bev)
 
+        # Generate bboxes from bbox head predictions.
         bbox_list = self.pts_bbox_head.get_bboxes(
             outs, img_metas, rescale=rescale)
+        
+        # bbox_results shape: dict(boxes_3d, scores_3d, labels_3d) in cpu mode
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)
             for bboxes, scores, labels in bbox_list
@@ -282,6 +296,8 @@ class BEVFormer(MVXTwoStageDetector):
 
     def simple_test(self, img_metas, img=None, prev_bev=None, rescale=False):
         """Test function without augmentaiton."""
+
+        # extract image features with backbone and neck
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
 
         bbox_list = [dict() for i in range(len(img_metas))]

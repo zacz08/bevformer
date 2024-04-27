@@ -164,15 +164,23 @@ def _get_can_bus_info(nusc, nusc_can_bus, sample):
     for i, pose in enumerate(pose_list):
         if pose['utime'] > sample_timestamp:
             break
+        # obtain the can_bus information which is recorded before the sample recorded.
         last_pose = pose
     _ = last_pose.pop('utime')  # useless
     pos = last_pose.pop('pos')
     rotation = last_pose.pop('orientation')
-    can_bus.extend(pos)
-    can_bus.extend(rotation)
+
+    # one can_bus record contains 18 numbers
+    can_bus.extend(pos)         # [0:3] is the position
+    can_bus.extend(rotation)    # [3:7] is the orientation
+
     for key in last_pose.keys():
-        can_bus.extend(pose[key])  # 16 elements
+        # 16 elements
+        can_bus.extend(pose[key])  # accel: [7, 10], rotation_rate: [10: 13], velocity: [13: 16]
+    
+    # the last two numbers are reserved for later calculation of rotation angle.
     can_bus.extend([0., 0.])
+    
     return np.array(can_bus)
 
 

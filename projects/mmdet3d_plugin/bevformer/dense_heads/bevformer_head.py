@@ -140,6 +140,7 @@ class BEVFormerHead(DETRHead):
                                device=bev_queries.device).to(dtype)
         bev_pos = self.positional_encoding(bev_mask).to(dtype)
 
+        # transformer file: projects/mmdet3d_plugin/bevformer/modules/transformer.py
         if only_bev:  # only use encoder to obtain BEV features, TODO: refine the workaround
             return self.transformer.get_bev_features(
                 mlvl_feats,
@@ -170,16 +171,15 @@ class BEVFormerHead(DETRHead):
 
         bev_embed, hs, init_reference, inter_references = outputs
         hs = hs.permute(0, 2, 1, 3)
-        outputs_classes = []
-        outputs_coords = []
+        outputs_classes, outputs_coords = [], []
         for lvl in range(hs.shape[0]):
             if lvl == 0:
                 reference = init_reference
             else:
                 reference = inter_references[lvl - 1]
             reference = inverse_sigmoid(reference)
-            outputs_class = self.cls_branches[lvl](hs[lvl])
-            tmp = self.reg_branches[lvl](hs[lvl])
+            outputs_class = self.cls_branches[lvl](hs[lvl])     # class
+            tmp = self.reg_branches[lvl](hs[lvl])               # bbox coord
 
             # TODO: check the shape of reference
             assert reference.shape[-1] == 3
