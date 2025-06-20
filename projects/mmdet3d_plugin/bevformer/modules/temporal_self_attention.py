@@ -99,7 +99,7 @@ class TemporalSelfAttention(BaseModule):
         self.sampling_offsets = nn.Linear(
             embed_dims*self.num_bev_queue, num_bev_queue*num_heads * num_levels * num_points * 2)
         self.attention_weights = nn.Linear(embed_dims*self.num_bev_queue,
-                                           num_bev_queue*num_heads * num_levels * num_points)
+                                           num_bev_queue*num_heads * num_levels * num_points) #num_bev_queue指的是网络融合了前后帧，以cat的方式，因此维度应该×num_bev_queue
         self.value_proj = nn.Linear(embed_dims, embed_dims)
         self.output_proj = nn.Linear(embed_dims, embed_dims)
         self.init_weights()
@@ -174,10 +174,10 @@ class TemporalSelfAttention(BaseModule):
              Tensor: forwarded results with shape [num_query, bs, embed_dims].
         """
 
-        if value is None:
+        if value is None: #处理初始情况
             assert self.batch_first
             bs, len_bev, c = query.shape
-            value = torch.stack([query, query], 1).reshape(bs*2, len_bev, c)
+            value = torch.stack([query, query], 1).reshape(bs*2, len_bev, c) # TAS初始化value
 
             # value = torch.cat([query, query], 0)
 
@@ -194,39 +194,39 @@ class TemporalSelfAttention(BaseModule):
         assert (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == num_value
         assert self.num_bev_queue == 2
 
-        query = torch.cat([value[:bs], query], -1)
+        query = torch.cat([value[:bs], query], -1) # 定义了三帧的情况吧
         value = self.value_proj(value)
 
         if key_padding_mask is not None:
             value = value.masked_fill(key_padding_mask[..., None], 0.0)
 
         value = value.reshape(bs*self.num_bev_queue,
-                              num_value, self.num_heads, -1)
+                              num_value, self.num_heads, -1) # 将value拆分成多头形式
 
-        sampling_offsets = self.sampling_offsets(query)
+        sampling_offsets = self.sampling_offsets(query) # 用query拟合出偏移量，deta_x, deta_y
         sampling_offsets = sampling_offsets.view(
-            bs, num_query, self.num_heads,  self.num_bev_queue, self.num_levels, self.num_points, 2)
+            bs, num_query, self.num_heads,  self.num_bev_queue, self.num_levels, self.num_points, 2) # 时间注意力对参考点周围的四个偏移点进行注意力计算
         attention_weights = self.attention_weights(query).view(
             bs, num_query,  self.num_heads, self.num_bev_queue, self.num_levels * self.num_points)
-        attention_weights = attention_weights.softmax(-1)
+        attention_weights = attention_weights.softmax(-1) # 注意力权重是什么？是直接将查询进行映射，然后用softmax归一化到0-1，作为注意力加权矩阵
 
         attention_weights = attention_weights.view(bs, num_query,
                                                    self.num_heads,
                                                    self.num_bev_queue,
                                                    self.num_levels,
-                                                   self.num_points)
+                                                   self.num_points) # [1, 22500, 8, 2, 1, 4]
 
         attention_weights = attention_weights.permute(0, 3, 1, 2, 4, 5)\
-            .reshape(bs*self.num_bev_queue, num_query, self.num_heads, self.num_levels, self.num_points).contiguous()
+            .reshape(bs*self.num_bev_queue, num_query, self.num_heads, self.num_levels, self.num_points).contiguous() # [2, 22500, 8, 1, 4])
         sampling_offsets = sampling_offsets.permute(0, 3, 1, 2, 4, 5, 6)\
-            .reshape(bs*self.num_bev_queue, num_query, self.num_heads, self.num_levels, self.num_points, 2)
+            .reshape(bs*self.num_bev_queue, num_query, self.num_heads, self.num_levels, self.num_points, 2)  # 每个采样点的[2, 22500, 8, 1, 4]
 
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.stack(
                 [spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
             sampling_locations = reference_points[:, :, None, :, None, :] \
                 + sampling_offsets \
-                / offset_normalizer[None, None, None, :, None, :]
+                / offset_normalizer[None, None, None, :, None, :] # 归一化参考点
 
         elif reference_points.shape[-1] == 4:
             sampling_locations = reference_points[:, :, None, :, None, :2] \
@@ -248,7 +248,9 @@ class TemporalSelfAttention(BaseModule):
                 value, spatial_shapes, level_start_index, sampling_locations,
                 attention_weights, self.im2col_step)
         else:
-
+            """
+            value： 
+            """
             output = multi_scale_deformable_attn_pytorch(
                 value, spatial_shapes, sampling_locations, attention_weights)
 

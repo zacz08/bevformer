@@ -269,4 +269,4 @@ log_config = dict(
 
 fp16 = dict(loss_scale=512.)
 checkpoint_config = dict(interval=1)
-custom_hooks = [dict(type='TransferWeight',priority='LOWEST')]
+custom_hooks = [dict(type='TransferWeight', priority='LOWEST')]

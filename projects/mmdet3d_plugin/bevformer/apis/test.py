@@ -59,7 +59,8 @@ def custom_multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
         list: The prediction results.
     """
     model.eval()
-    bbox_results, mask_results = [], []
+    bbox_results = []
+    mask_results = []
     dataset = data_loader.dataset
     rank, world_size = get_dist_info()
     if rank == 0:
@@ -68,7 +69,6 @@ def custom_multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
     have_mask = False
     for i, data in enumerate(data_loader):
         with torch.no_grad():
-            # model defined in 'projects/mmdet3d_plugin/bevformer/detectors/bevformer.py'
             result = model(return_loss=False, rescale=True, **data)
             # encode mask results
             if isinstance(result, dict):

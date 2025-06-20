@@ -3,9 +3,10 @@
 # ---------------------------------------------
 #  Modified by Zhiqi Li
 # ---------------------------------------------
-import argparse
-import mmcv
 import os
+import sys
+sys.path.insert(0, '/home/guozebin/work_code/BEVFormer/')
+import argparse
 import torch
 import warnings
 from mmcv import Config, DictAction
@@ -14,12 +15,17 @@ from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
                          wrap_fp16_model)
 
-from mmdet3d.apis import single_gpu_test
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+#from mmdet3d.apis import single_gpu_test
+from projects.mmdet3d_plugin.apis.test import single_gpu_test
 from mmdet3d.datasets import build_dataset
 from projects.mmdet3d_plugin.datasets.builder import build_dataloader
 from mmdet3d.models import build_model
 from mmdet.apis import set_random_seed
 from projects.mmdet3d_plugin.bevformer.apis.test import custom_multi_gpu_test
+from projects.mmdet3d_plugin.apis.test import multi_gpu_test
 from mmdet.datasets import replace_ImageToTensor
 import time
 import os.path as osp
@@ -157,10 +163,6 @@ def main():
     # set cudnn_benchmark
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
-    # set tf32
-    if cfg.get('close_tf32', False):
-        torch.backends.cuda.matmul.allow_tf32 = False
-        torch.backends.cudnn.allow_tf32 = False
 
     cfg.model.pretrained = None
     # in case the test dataset is concatenated
@@ -226,17 +228,17 @@ def main():
         model.PALETTE = dataset.PALETTE
 
     if not distributed:
-        assert False
-        # model = MMDataParallel(model, device_ids=[0])
-        # outputs = single_gpu_test(model, data_loader, args.show, args.show_dir)
+        #assert False
+        model = MMDataParallel(model, device_ids=[0])
+        outputs = single_gpu_test(model, data_loader, args.show, args.show_dir)
     else:
         model = MMDistributedDataParallel(
             model.cuda(),
             device_ids=[torch.cuda.current_device()],
             broadcast_buffers=False)
-        outputs = custom_multi_gpu_test(model, data_loader, args.tmpdir,
+        #outputs = custom_multi_gpu_test(model, data_loader, args.tmpdir, args.gpu_collect)
+        outputs = multi_gpu_test(model, data_loader, args.tmpdir,
                                         args.gpu_collect)
-
     rank, _ = get_dist_info()
     if rank == 0:
         if args.out:
@@ -246,20 +248,20 @@ def main():
         kwargs = {} if args.eval_options is None else args.eval_options
         kwargs['jsonfile_prefix'] = osp.join('test', args.config.split(
             '/')[-1].split('.')[-2], time.ctime().replace(' ', '_').replace(':', '_'))
-        if args.format_only:
-            dataset.format_results(outputs, **kwargs)
+        # if args.format_only:
+        #     dataset.format_results(outputs, **kwargs)
 
-        if args.eval:
-            eval_kwargs = cfg.get('evaluation', {}).copy()
-            # hard-code way to remove EvalHook args
-            for key in [
-                    'interval', 'tmpdir', 'start', 'gpu_collect', 'save_best',
-                    'rule'
-            ]:
-                eval_kwargs.pop(key, None)
-            eval_kwargs.update(dict(metric=args.eval, **kwargs))
+        # if args.eval:
+        #     eval_kwargs = cfg.get('evaluation', {}).copy()
+        #     # hard-code way to remove EvalHook args
+        #     for key in [
+        #             'interval', 'tmpdir', 'start', 'gpu_collect', 'save_best',
+        #             'rule'
+        #     ]:
+        #         eval_kwargs.pop(key, None)
+        #     eval_kwargs.update(dict(metric=args.eval, **kwargs))
 
-            print(dataset.evaluate(outputs, **eval_kwargs))
+        #     print(dataset.evaluate(outputs, **eval_kwargs))
 
 
 if __name__ == '__main__':

@@ -48,10 +48,19 @@ class PerceptionTransformer(BaseModule):
                  can_bus_norm=True,
                  use_cams_embeds=True,
                  rotate_center=[100, 100],
+                 lss_transformer=None,
                  **kwargs):
         super(PerceptionTransformer, self).__init__(**kwargs)
         self.encoder = build_transformer_layer_sequence(encoder)
-        self.decoder = build_transformer_layer_sequence(decoder)
+        if lss_transformer is not None:
+            self.lss_encoder = build_transformer_layer_sequence(lss_transformer)
+        else:
+            self.lss_encoder = None
+
+        if decoder is not None:
+            self.decoder = build_transformer_layer_sequence(decoder)
+        else:
+            self.decoder = None
         self.embed_dims = embed_dims
         self.num_feature_levels = num_feature_levels
         self.num_cams = num_cams
@@ -100,6 +109,18 @@ class PerceptionTransformer(BaseModule):
         xavier_init(self.reference_points, distribution='uniform', bias=0.)
         xavier_init(self.can_bus_mlp, distribution='uniform', bias=0.)
 
+    def get_lss_bev_feature(
+            self,
+            mlvl_feats,
+            **kwargs):
+
+        x = mlvl_feats[-1]
+        rots, trans, intrins, post_rots, post_trans = None
+
+        lss_bev_feature = self.transformer(x, rots, trans, intrins, post_rots, post_trans)
+
+        return lss_bev_feature
+
     @auto_fp16(apply_to=('mlvl_feats', 'bev_queries', 'prev_bev', 'bev_pos'))
     def get_bev_features(
             self,
@@ -119,11 +140,7 @@ class PerceptionTransformer(BaseModule):
         bev_queries = bev_queries.unsqueeze(1).repeat(1, bs, 1)
         bev_pos = bev_pos.flatten(2).permute(2, 0, 1)
 
-
-        """
-        Obtain rotation angle and shift with ego motion
-        Used can_bus(array len()=18) from img_metas
-        """
+        # obtain rotation angle and shift with ego motion
         delta_x = np.array([each['can_bus'][0]
                            for each in kwargs['img_metas']])
         delta_y = np.array([each['can_bus'][1]
@@ -134,7 +151,6 @@ class PerceptionTransformer(BaseModule):
         grid_length_x = grid_length[1]
         translation_length = np.sqrt(delta_x ** 2 + delta_y ** 2)
         translation_angle = np.arctan2(delta_y, delta_x) / np.pi * 180
-        # bev_angle: vehicle angle change in BEV coord
         bev_angle = ego_angle - translation_angle
         shift_y = translation_length * \
             np.cos(bev_angle / 180 * np.pi) / grid_length_y / bev_h
@@ -188,7 +204,6 @@ class PerceptionTransformer(BaseModule):
         feat_flatten = feat_flatten.permute(
             0, 2, 1, 3)  # (num_cam, H*W, bs, embed_dims)
 
-        # defined in 'projects/mmdet3d_plugin/bevformer/modules/decoder.py'
         bev_embed = self.encoder(
             bev_queries,
             feat_flatten,
@@ -278,18 +293,23 @@ class PerceptionTransformer(BaseModule):
         query_pos = query_pos.permute(1, 0, 2)
         bev_embed = bev_embed.permute(1, 0, 2)
 
-        inter_states, inter_references = self.decoder(
-            query=query,
-            key=None,
-            value=bev_embed,
-            query_pos=query_pos,
-            reference_points=reference_points,
-            reg_branches=reg_branches,
-            cls_branches=cls_branches,
-            spatial_shapes=torch.tensor([[bev_h, bev_w]], device=query.device),
-            level_start_index=torch.tensor([0], device=query.device),
-            **kwargs)
+        if self.decoder is not None:
 
-        inter_references_out = inter_references
+            inter_states, inter_references = self.decoder(
+                query=query,
+                key=None,
+                value=bev_embed,
+                query_pos=query_pos,
+                reference_points=reference_points,
+                reg_branches=reg_branches,
+                cls_branches=cls_branches,
+                spatial_shapes=torch.tensor([[bev_h, bev_w]], device=query.device),
+                level_start_index=torch.tensor([0], device=query.device),
+                **kwargs)
 
-        return bev_embed, inter_states, init_reference_out, inter_references_out
+            inter_references_out = inter_references
+
+            return bev_embed, inter_states, init_reference_out, inter_references_out
+
+        else:
+            return bev_embed, None, None, None

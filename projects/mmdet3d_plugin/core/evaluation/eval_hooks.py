@@ -73,19 +73,38 @@ class CustomDistEvalHook(BaseDistEvalHook):
         if tmpdir is None:
             tmpdir = osp.join(runner.work_dir, '.eval_hook')
 
-        from projects.mmdet3d_plugin.bevformer.apis.test import custom_multi_gpu_test # to solve circlur  import
+        from projects.mmdet3d_plugin.apis.test import multi_gpu_test # to solve circlur  import
 
-        results = custom_multi_gpu_test(
+        results = multi_gpu_test(
             runner.model,
             self.dataloader,
             tmpdir=tmpdir,
             gpu_collect=self.gpu_collect)
         if runner.rank == 0:
-            print('\n')
+            if results == []:
+                pass
+            else:
+                print('\n')
+                runner.log_buffer.output['eval_iter_num'] = len(self.dataloader)
+
+                key_score = self.evaluate(runner, results)
+
+                if self.save_best:
+                    self._save_ckpt(runner, key_score)
+
+class EvalHook(BaseEvalHook):
+
+    def _do_evaluate(self, runner):
+        """perform evaluation and save ckpt."""
+        if not self._should_evaluate(runner):
+            return
+
+        from projects.mmdet3d_plugin.apis.test import single_gpu_test
+        results = single_gpu_test(runner.model, self.dataloader, show=False)
+        if results == []:
+            pass
+        else:
             runner.log_buffer.output['eval_iter_num'] = len(self.dataloader)
-
             key_score = self.evaluate(runner, results)
-
             if self.save_best:
                 self._save_ckpt(runner, key_score)
-  

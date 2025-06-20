@@ -314,7 +314,7 @@ def lidiar_render(sample_token, data,out_path=None):
     pred_annotations.add_boxes(sample_token, bbox_pred_list)
     print('green is ground truth')
     print('blue is the predited result')
-    visualize_sample(nusc, sample_token, gt_annotations, pred_annotations, savepath=output_folder + '/bev_' + ("%05d.jpg" % out_path))
+    visualize_sample(nusc, sample_token, gt_annotations, pred_annotations, savepath=out_path+'_bev')
 
 
 def get_color(category_name: str):
@@ -463,18 +463,15 @@ def render_sample_data(
         ax[j + 2, ind].set_aspect('equal')
 
     if out_path is not None:
-        # plt.savefig(out_path+'_camera', bbox_inches='tight', pad_inches=0, dpi=200)
-        plt.savefig(output_folder + '/camera_' + ("%05d.jpg" % out_path), bbox_inches='tight', pad_inches=0, dpi=200)
+        plt.savefig(out_path+'_camera', bbox_inches='tight', pad_inches=0, dpi=200)
     if verbose:
         plt.show()
     plt.close()
 
 if __name__ == '__main__':
-    # nusc = NuScenes(version='v1.0-trainval', dataroot='./data/nuscenes', verbose=True)
-    nusc = NuScenes(version='v1.0-mini', dataroot='./data/nuscenes', verbose=True)
+    nusc = NuScenes(version='v1.0-trainval', dataroot='/home/guozebin/work_code/BEVFormer/data/nuscenes', verbose=True)
     # render_annotation('7603b030b42a4b1caa8c443ccc1a7d52')
-    bevformer_results = mmcv.load('/home/zc/BEVFormer/test/bevformer_base/Fri_Apr_19_16_42_28_2024/pts_bbox/results_nusc.json')
+    bevformer_results = mmcv.load('/home/guozebin/work_code/BEVFormer/test/bevformer_test/Tue_Jan__3_14_27_26_2023/pts_bbox/results_nusc.json')
     sample_token_list = list(bevformer_results['results'].keys())
-    output_folder = '/home/zc/BEVFormer/test/bevformer_base/Fri_Apr_19_16_42_28_2024/images'
-    for id in range(0, len(sample_token_list)):
-        render_sample_data(sample_token_list[id], pred_data=bevformer_results, out_path=id, verbose=False)
+    for id in range(0, 10):
+        render_sample_data(sample_token_list[id], pred_data=bevformer_results, out_path=sample_token_list[id])

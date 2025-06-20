@@ -32,6 +32,7 @@ class BEVFormer_fp16(BEVFormer):
                       img_metas=None,
                       gt_bboxes_3d=None,
                       gt_labels_3d=None,
+                      semantic_indices=None,
                       gt_labels=None,
                       gt_bboxes=None,
                       img=None,

@@ -5,7 +5,10 @@
 # ---------------------------------------------
  
 from __future__ import division
-
+import os
+#os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import argparse
 import copy
 import mmcv
@@ -138,10 +141,6 @@ def main():
     # set cudnn_benchmark
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
-    # set tf32
-    if cfg.get('close_tf32', False):
-        torch.backends.cuda.matmul.allow_tf32 = False
-        torch.backends.cudnn.allow_tf32 = False
 
     # work_dir is determined in this priority: CLI > segment in file > filename
     if args.work_dir is not None:

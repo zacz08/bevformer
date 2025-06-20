@@ -15,7 +15,7 @@ unzip can_bus.zip
 
 *We genetate custom annotation files which are different from mmdet3d's*
 ```
-python tools/create_data.py nuscenes --root-path ./data/nuscenes --out-dir ./data/nuscenes --extra-tag nuscenes --version v1.0 --canbus ./data
+python tools/create_data.py nuscenes --root-path ./data/nuscenes --out-dir ./data/nuscenes --extra-tag nuscenes --version v1.0 --canbus ./data/nuscenes
 ```
 
 Using the above code will generate `nuscenes_infos_temporal_{train,val}.pkl`.
@@ -29,8 +29,8 @@ bevformer
 ├── ckpts/
 │   ├── r101_dcn_fcos3d_pretrain.pth
 ├── data/
-│   ├── can_bus/
 │   ├── nuscenes/
+|   |   ├── can_bus/
 │   │   ├── maps/
 │   │   ├── samples/
 │   │   ├── sweeps/
