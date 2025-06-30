@@ -299,7 +299,7 @@ class CustomNuScenesDataset(NuScenesDataset):
 
         matches = [f for f in os.listdir(folder) if f.endswith(suffix)]
         if not matches:
-            raise FileNotFoundError(f"No .npy file found ending with: {suffix}")
+            raise FileNotFoundError(f"No .npy file found ending with: {suffix} in folder {folder}")
         if len(matches) > 1:
             raise ValueError(f"Multiple files matched token {sample_token}: {matches}")
 

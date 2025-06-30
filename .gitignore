@@ -110,6 +110,7 @@ celerybeat.pid
 
 # Environments
 .env
+.vscode/
 .venv
 env/
 venv/
@@ -134,3 +135,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+segmentation_result.json

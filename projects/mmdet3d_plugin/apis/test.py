@@ -1,8 +1,9 @@
-import os.path as osp
+import os
 import shutil
 import tempfile
 import time
 import cv2
+import torchvision
 
 from PIL import Image
 
@@ -66,7 +67,7 @@ def single_gpu_test(model,
         map_enable = False
 
     if map_enable:
-        num_map_class = 4
+        num_map_class = 6
         semantic_map_iou_val = IntersectionOverUnion(num_map_class)
         semantic_map_iou_val = semantic_map_iou_val.cuda()
 
@@ -85,67 +86,42 @@ def single_gpu_test(model,
         show_mask_gt = True
 
         if (result[0]['seg_preds'] is not None) and (show or out_dir):
-            car_img = Image.open('./icon/car.png')
-            car_img_cv = cv2.imread('./icon/car.png')
-            semantic = result[0]['seg_preds']
-            semantic = onehot_encoding(semantic).cpu().numpy()
+            images = dict()
+            N = min(result[0]['seg_preds'].shape[0], 4)
+            images['pred'] = result[0]['seg_preds'][:N]
 
-            # 可视化BEVFusion风格分割结果 BEVFusion分割类间无竞争，如何处理？
-            # 使用cv2进行可视化
-            if cv2_style:
-                imname = f'{out_dir}/{data["img_metas"][0].data[0][0]["sample_idx"]}.png'
-                logger.info(f'saving: {imname}')
-                cv2.imwrite(imname, show_seg(semantic.squeeze(), car_img_cv))
+            processed_images = []
+            spacing = 8
+            for k in images:
+                if isinstance(images[k], np.ndarray):
+                    images[k] = torch.from_numpy(images[k])
+                grid = torchvision.utils.make_grid(images[k], nrow=4)
+                grid = (grid > 0).cpu().numpy().astype(np.uint8)
+                processed_images.append(grid)
 
-                if show_mask_gt:
-                    target_semantic_indices = data['semantic_indices'][0].unsqueeze(0)
-                    one_hot = target_semantic_indices.new_full(semantic.shape, 0)
-                    one_hot.scatter_(1, target_semantic_indices, 1)
-                    semantic = one_hot.cpu().numpy().astype(np.float)
-                    imname = f'{out_dir}/{data["img_metas"][0].data[0][0]["sample_idx"]}_gt.png'
-                    logger.info(f'saving: {imname}')
-                    cv2.imwrite(imname, show_seg(semantic.squeeze(), car_img_cv))
-            else:
-                # 可视化HDMapNet风格分割结果
-                semantic[semantic < 0.1] = np.nan
-                for si in range(semantic.shape[0]):
-                    plt.figure(figsize=(4, 2))
-                    plt.imshow(semantic[si][1], vmin=0, cmap='Blues', vmax=1, alpha=0.8)
-                    plt.imshow(semantic[si][2], vmin=0, cmap='Reds', vmax=1, alpha=0.8)
-                    plt.imshow(semantic[si][3], vmin=0, cmap='Greens', vmax=1, alpha=0.8)
+            if len(processed_images) > 0:
 
-                    plt.xlim(0, 400)
-                    plt.ylim(0, 200)
-                    plt.axis('off')
-                    plt.imshow(car_img, extent=[semantic.shape[3] // 2 - 15, semantic.shape[3] // 2 + 15,
-                                                semantic.shape[2] // 2 - 12, semantic.shape[2] // 2 + 12])
-                    imname = f'{out_dir}/{data["img_metas"][0].data[0][0]["sample_idx"]}.png'
-                    logger.info(f'saving: {imname}')
-                    plt.savefig(imname, bbox_inches='tight', dpi=100)
-                    plt.close()
+                # add blank gap between images
+                images_with_spacing = []
+                for img in processed_images:
+                    # img = np.transpose(img, (2, 0, 1))  # [512, 512, 4] -> [4, 512, 512]
+                    horizontal_mask = np.concatenate(img, axis=1)   # [4, 512, 512] -> [512, 2048]
+                    rgb_mask = np.stack([horizontal_mask] * 3, axis=2)  # [512, 2048] -> [512, 2048, 3] to show in RGB
+                    img = Image.fromarray(rgb_mask * 255)  # convert to PIL Image, rescale to [0, 255]
+                    images_with_spacing.append(img)
+                    _, img_width = horizontal_mask.shape
+                    blank_image = np.ones((spacing, img_width, 3), dtype=np.uint8) * 255  # blank gap
+                    images_with_spacing.append(blank_image)
+                # remove last blank gap of the last image
+                images_with_spacing = images_with_spacing[:-1]
 
-                if show_mask_gt:
+                stacked_image = np.vstack(images_with_spacing)  # stack vertically
 
-                    target_semantic_indices = data['semantic_indices'][0].unsqueeze(0)
-                    one_hot = target_semantic_indices.new_full(semantic.shape, 0)
-                    one_hot.scatter_(1, target_semantic_indices, 1)
-                    semantic = one_hot.cpu().numpy().astype(np.float)
-                    semantic[semantic < 0.1] = np.nan
-                    for si in range(semantic.shape[0]):
-                        plt.figure(figsize=(4, 2))
-                        plt.imshow(semantic[si][1], vmin=0, cmap='Blues', vmax=1, alpha=0.8)
-                        plt.imshow(semantic[si][2], vmin=0, cmap='Reds', vmax=1, alpha=0.8)
-                        plt.imshow(semantic[si][3], vmin=0, cmap='Greens', vmax=1, alpha=0.8)
-
-                        plt.xlim(0, 400)
-                        plt.ylim(0, 200)
-                        plt.axis('off')
-                        plt.imshow(car_img, extent=[semantic.shape[3] // 2 - 15, semantic.shape[3] // 2 + 15,
-                                                    semantic.shape[2] // 2 - 12, semantic.shape[2] // 2 + 12])
-                        imname = f'{out_dir}/{data["img_metas"][0].data[0][0]["sample_idx"]}_gt.png'
-                        logger.info(f'saving: {imname}')
-                        plt.savefig(imname)
-                        plt.close()
+                # save the combined image
+                filename = "result-{:05}.png".format(i)
+                path = os.path.join(out_dir, filename)
+                os.makedirs(os.path.split(path)[0], exist_ok=True)
+                Image.fromarray(stacked_image).save(path)
 
         if result[0]['pts_bbox'] == None:
             pass
@@ -157,11 +133,11 @@ def single_gpu_test(model,
             map_enable = False
 
         if map_enable:
-            pred = result[0]['seg_preds']
-            pred = onehot_encoding(pred)
-            num_cls = pred.shape[1]
-            indices = torch.arange(0, num_cls).reshape(-1, 1, 1).to(pred.device)
-            pred_semantic_indices = torch.sum(pred * indices, axis=1).int()
+            pred_semantic_indices = result[0]['seg_preds']
+            # pred = onehot_encoding(pred)
+            # num_cls = pred.shape[1]
+            # indices = torch.arange(0, num_cls).reshape(-1, 1, 1).to(pred.device)
+            # pred_semantic_indices = torch.sum(pred * indices, axis=1).int()
             target_semantic_indices = data['semantic_indices'][0].cuda()
 
             semantic_map_iou_val(pred_semantic_indices,
@@ -173,25 +149,26 @@ def single_gpu_test(model,
     if map_enable:
         import prettytable as pt
         scores = semantic_map_iou_val.compute()
-        mIoU = sum(scores[1:]) / (len(scores) - 1)
+        mIoU = scores.mean()
         tb = pt.PrettyTable()
-        tb.field_names = ['Validation num', 'Divider', 'Pred Crossing', 'Boundary', 'mIoU']
-        tb.add_row([len(dataset), round(scores[1:].cpu().numpy()[0], 4),
-                    round(scores[1:].cpu().numpy()[1], 4), round(scores[1:].cpu().numpy()[2], 4),
-                    round(mIoU.cpu().numpy().item(), 4)])
+        categories = ['drivable_area', 'ped_crossing', 'walkway', 'stop_line', 'carpark_area', 'lane_divider']
+        tb.field_names = ['Validation num'] + categories + ['mIoU']
+        class_scores = [round(s.item(), 6) for s in scores]
+        tb.add_row([len(dataset)] + class_scores + [round(mIoU.item(), 4)])
+
         print('\n')
         print(tb)
         logger.info(tb)
-        seg_dict = dict(
-            Validation_num=len(dataset),
-            Divider=round(scores[1:].cpu().numpy()[0], 4),
-            Pred_Crossing=round(scores[1:].cpu().numpy()[1], 4),
-            Boundary=round(scores[1:].cpu().numpy()[2], 4),
-            mIoU=round(mIoU.cpu().numpy().item(), 4)
-        )
+
+        seg_dict = {'Validation_num': len(dataset)}
+        seg_dict.update({
+            name: round(score.item(), 4)
+            for name, score in zip(categories, scores)
+        })
+        seg_dict['mIoU'] = round(mIoU.item(), 4)
 
         with open('segmentation_result.json', 'a') as f:
-            f.write(json.dumps(str(seg_dict)) + '\n')
+            f.write(json.dumps(seg_dict) + '\n')
 
     return results
 
@@ -321,7 +298,7 @@ def collect_results_cpu(result_part, size, tmpdir=None):
     else:
         mmcv.mkdir_or_exist(tmpdir)
     # dump the part result to the dir
-    mmcv.dump(result_part, osp.join(tmpdir, f'part_{rank}.pkl'))
+    mmcv.dump(result_part, os.path.join(tmpdir, f'part_{rank}.pkl'))
     dist.barrier()
     # collect all parts
     if rank != 0:
@@ -330,7 +307,7 @@ def collect_results_cpu(result_part, size, tmpdir=None):
         # load results of all parts from tmp dir
         part_list = []
         for i in range(world_size):
-            part_file = osp.join(tmpdir, f'part_{i}.pkl')
+            part_file = os.path.join(tmpdir, f'part_{i}.pkl')
             part_list.append(mmcv.load(part_file))
         # sort the results
         ordered_results = []

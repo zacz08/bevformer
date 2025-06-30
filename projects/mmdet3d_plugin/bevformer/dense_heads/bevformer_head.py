@@ -163,7 +163,9 @@ class BEVFormerHead(DETRHead):
             self.det_grid_conf = det_grid_conf
             self.feat_cropper = BevFeatureSlicer(self.det_grid_conf, self.map_grid_conf)
             self.seg_decoder = build_seg_encoder(seg_encoder)
-            self.loss_seg = build_loss(loss_seg)
+            # self.loss_seg = build_loss(loss_seg)
+        self.seg_loss_weight = loss_seg.get('class_weight', 1.0)
+        self.loss_seg = WeightedBCEWithLogitsLoss()
 
     def _init_layers(self):
         """Initialize classification branch and regression branch of head."""
@@ -570,7 +572,7 @@ class BEVFormerHead(DETRHead):
         """
         loss_dict = dict()
         seg_preds = pred_dicts['seg_preds']
-        seg_loss = self.loss_seg(seg_preds, semantic_gt)
+        seg_loss = self.loss_seg(seg_preds, semantic_gt, self.seg_loss_weight)
         loss_dict['loss_seg'] = seg_loss
         return loss_dict
 
@@ -689,3 +691,19 @@ class BEVFormerHead(DETRHead):
             ret_list.append([bboxes, scores, labels])
 
         return ret_list
+    
+
+class WeightedBCEWithLogitsLoss(nn.Module):
+    def __init__(self, reduction='none'):
+        super(WeightedBCEWithLogitsLoss, self).__init__()
+        self.bce = nn.BCEWithLogitsLoss(reduction=reduction)
+
+    def forward(self, logits, targets, weights):
+        # targets = (targets + 1) / 2  # Normalized to [0,1]
+        bce_loss = self.bce(logits, targets).mean(dim=(2, 3))
+        
+        # apply per-layer weights
+        # weighted_loss = weights[:, :, None, None] * bce_loss
+        weights = torch.tensor(weights, dtype=torch.float32, device=bce_loss.device)
+        weighted_loss = (bce_loss * weights).sum(dim=1)
+        return weighted_loss.mean()

@@ -195,7 +195,8 @@ def main():
         set_random_seed(args.seed, deterministic=args.deterministic)
 
     # build the dataloader
-    dataset = build_dataset(cfg.data.test)
+    cfg.data.val.pop('samples_per_gpu', None)
+    dataset = build_dataset(cfg.data.val)
     data_loader = build_dataloader(
         dataset,
         samples_per_gpu=samples_per_gpu,

@@ -95,7 +95,7 @@ model = dict(
             outC=6),
         loss_seg=dict(
             type='CrossEntropyLoss',
-            use_sigmoid=False,
+            use_sigmoid=True,   # set to True for multi-label segmentation
             loss_weight=3.0,
             class_weight=[0.0671, 1.7914, 0.2680, 1.3406, 1.6461, 0.8869]),
         transformer=dict(
@@ -252,7 +252,8 @@ data = dict(
         grid_conf=grid_conf,
         bev_size=(bev_h_, bev_w_),
         queue_length=queue_length,
-        split='mini_train',
+        # split='mini_train',
+        split='train',
         # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
         # and box_type_3d='Depth' in sunrgbd and scannet dataset.
         box_type_3d='LiDAR'),
@@ -261,7 +262,8 @@ data = dict(
              grid_conf=grid_conf,
              ann_file=data_root + 'nuscenes_infos_temporal_val.pkl',
              pipeline=test_pipeline,  bev_size=(bev_h_, bev_w_),
-             split='mini_val',
+            #  split='mini_val',
+             split='val',
              classes=class_names, modality=input_modality, samples_per_gpu=1),
     test=dict(type=dataset_type,
               grid_conf=grid_conf,
