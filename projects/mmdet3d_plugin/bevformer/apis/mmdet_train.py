@@ -194,6 +194,11 @@ def custom_train_detector(model,
 
     if cfg.resume_from:
         runner.resume(cfg.resume_from)
+        # Fix: ensure optimizer 'step' is on CPU to avoid PyTorch 2.x capturable=False error
+        for param_group in runner.optimizer.param_groups:
+            for state in runner.optimizer.state.values():
+                if 'step' in state and isinstance(state['step'], torch.Tensor):
+                    state['step'] = state['step'].cpu()
     elif cfg.load_from:
         runner.load_checkpoint(cfg.load_from)
     runner.run(data_loaders, cfg.workflow)
