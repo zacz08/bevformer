@@ -4,6 +4,7 @@ import tempfile
 import time
 import cv2
 import torchvision
+import time
 
 from PIL import Image
 
@@ -73,9 +74,11 @@ def single_gpu_test(model,
 
     model.eval()
     results = []
+    inference_times = []
     dataset = data_loader.dataset
     prog_bar = mmcv.ProgressBar(len(dataset))
     for i, data in enumerate(data_loader):
+        start = time.time()
 
         with torch.no_grad():
             in_data = {i: j for i, j in data.items() if 'img' in i}
@@ -84,6 +87,11 @@ def single_gpu_test(model,
         batch_size = len(result)
         assert batch_size == 1, 'val step batch size must set 1!'
         show_mask_gt = True
+
+        torch.cuda.synchronize()
+        end = time.time()
+        elapsed = end - start
+        inference_times.append(elapsed)
 
         if (result[0]['seg_preds'] is not None) and (show or out_dir):
             images = dict()
@@ -145,6 +153,13 @@ def single_gpu_test(model,
 
         for _ in range(batch_size):
             prog_bar.update()
+
+    # Calculate average inference time and FPS
+    total_time = sum(inference_times)
+    num_samples = len(inference_times)
+    avg_time = total_time / num_samples
+    fps = 1.0 / avg_time
+    print(f"\n✅ Average time per sample = {avg_time:.4f} s, FPS = {fps:.2f}")
 
     if map_enable:
         import prettytable as pt
