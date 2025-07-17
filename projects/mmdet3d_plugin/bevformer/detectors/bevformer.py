@@ -258,7 +258,7 @@ class BEVFormer(MVXTwoStageDetector):
         losses.update(losses_pts)
         return losses
 
-    def forward_test(self, img_metas, img=None, **kwargs):
+    def forward_test(self, img_metas, img=None, return_feature=False, **kwargs):
         for var, name in [(img_metas, 'img_metas')]:
             if not isinstance(var, list):
                 raise TypeError('{} must be a list, but got {}'.format(
@@ -292,6 +292,8 @@ class BEVFormer(MVXTwoStageDetector):
         self.prev_frame_info['prev_angle'] = tmp_angle
         self.prev_frame_info['prev_bev'] = new_prev_bev
 
+        if return_feature:
+            return new_prev_bev, bbox_results
         return bbox_results
 
     def simple_test_pts(self, x, img_metas, prev_bev=None, rescale=False):
